@@ -1,6 +1,6 @@
 # TAMP
 
-[![GitHub repo size](https://img.shields.io/github/repo-size/sekedus/tamp?label=Size)](https://github.com/sekedus/tamp) [![GitHub Clones](https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url=https://gist.githubusercontent.com/sekedus/0f5fd62474258fa66560be80b6bf9904/raw/clone.json)](https://github.com/MShawon/github-clone-count-badge) [![GitHub License](https://img.shields.io/github/license/sekedus/tamp?label=License)](https://github.com/sekedus/tamp/blob/main/LICENSE)
+[![GitHub repo size](https://img.shields.io/github/repo-size/CelestatOne/tamp?label=Size)](https://github.com/CelestatOne/tamp) [![GitHub Clones](https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url=https://gist.githubusercontent.com/CelestatOne/0f5fd62474258fa66560be80b6bf9904/raw/clone.json)](https://github.com/MShawon/github-clone-count-badge) [![GitHub License](https://img.shields.io/github/license/CelestatOne/tamp?label=License)](https://github.com/CelestatOne/tamp/blob/main/LICENSE)
 
 TAMP (Termux, Apache, MariaDB, PHP)
 
@@ -26,7 +26,7 @@ termux-setup-storage
 ```
 4. Install `git` & clone this repo: 
 ```bash
-pkg install git -y && cd ~/ && git clone https://github.com/sekedus/tamp.git
+pkg install git -y && cd ~/ && git clone https://github.com/CelestatOne/tamp.git
 ```
 5. Install TAMP: 
 ```bash
@@ -71,4 +71,4 @@ cd ~/tamp && bash setup && cd ~/
 ㅤ
 ## License
 
-TAMP is licensed under the GNU General Public License v3.0. See the [LICENSE](https://github.com/sekedus/tamp/blob/main/LICENSE) file for more details.
+TAMP is licensed under the GNU General Public License v3.0. See the [LICENSE](https://github.com/CelestatOne/tamp/blob/main/LICENSE) file for more details.
