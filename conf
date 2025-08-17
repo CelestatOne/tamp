@@ -1,0 +1,126 @@
+#!$PREFIX/bin/bash
+set -euo pipefail
+
+YELLOW='\033[0;33m'; GREEN='\033[0;32m'; NC='\033[0m'
+
+# --- Подключение /sdcard (обязательно для Termux)
+if [ ! -d ~/storage ]; then
+  termux-setup-storage
+  sleep 5
+fi
+
+echo -e "${YELLOW}==> Обновление пакетов${NC}"
+pkg update -y
+
+echo -e "${YELLOW}==> Установка Apache, PHP и модулей${NC}"
+pkg install -y php-apache php-mysqli php-mbstring php-xml php-zip php-gd php-curl \
+               openssl-tool mariadb composer
+
+HTTPD_CONF="$PREFIX/etc/apache2/httpd.conf"
+PMA_DIR="/var/www/phpmyadmin"
+DOCROOT="/sdcard/htdocs"
+
+# --- Докрут: редирект корня на /myadmin (резерв через index.php)
+mkdir -p "$DOCROOT"
+if [ ! -f "$DOCROOT/index.php" ]; then
+  cat > "$DOCROOT/index.php" <<'PHP'
+<?php
+header("Location: /myadmin/", true, 302);
+exit;
+PHP
+fi
+
+# --- Установка phpMyAdmin
+if [ ! -d "$PMA_DIR" ]; then
+  echo -e "${YELLOW}==> Установка phpMyAdmin в $PMA_DIR${NC}"
+  mkdir -p /var/www
+  composer create-project phpmyadmin/phpmyadmin "$PMA_DIR" --no-dev --prefer-dist
+fi
+
+# --- Настройка phpMyAdmin (tmp/upload/config с AllowNoPassword=true)
+mkdir -p "$PMA_DIR/tmp" "$PMA_DIR/upload"
+chmod 0777 "$PMA_DIR/tmp" "$PMA_DIR/upload"
+
+if [ ! -f "$PMA_DIR/config.inc.php" ]; then
+  BF=$(openssl rand -base64 32 | tr -d '\n' | sed 's/[^A-Za-z0-9._-]//g' | cut -c1-32)
+  cat > "$PMA_DIR/config.inc.php" <<PHP
+<?php
+\$cfg['blowfish_secret'] = '$BF';   // 32 символа
+
+\$i = 1;
+\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
+\$cfg['Servers'][\$i]['host']      = '127.0.0.1';
+\$cfg['Servers'][\$i]['AllowNoPassword'] = true;   // << разрешить пустой пароль
+\$cfg['UploadDir'] = 'upload';
+\$cfg['TempDir']   = 'tmp';
+PHP
+fi
+
+# --- Включение нужных модулей (подстраховка)
+sed -i 's/^#\s*LoadModule alias_module/LoadModule alias_module/' "$HTTPD_CONF" || true
+sed -i 's/^#\s*LoadModule rewrite_module/LoadModule rewrite_module/' "$HTTPD_CONF" || true
+
+# --- Автопатч: Alias /myadmin → /var/www/phpmyadmin
+if ! grep -q 'phpMyAdmin alias (auto)' "$HTTPD_CONF"; then
+  cat >> "$HTTPD_CONF" <<APACHE
+
+# ---- phpMyAdmin alias (auto) ----
+Alias /myadmin "$PMA_DIR"
+<Directory "$PMA_DIR">
+    Options Indexes FollowSymLinks
+    AllowOverride All
+    Require all granted
+    php_admin_value session.save_path "$PMA_DIR/tmp"
+    php_admin_value upload_tmp_dir "$PMA_DIR/tmp"
+</Directory>
+# ---- /phpMyAdmin alias ----
+APACHE
+fi
+
+# --- Автопатч: редирект корня "/" на /myadmin (Apache)
+if ! grep -q 'Root redirect to /myadmin (auto)' "$HTTPD_CONF"; then
+  cat >> "$HTTPD_CONF" <<'APACHE'
+
+# ---- Root redirect to /myadmin (auto) ----
+RedirectMatch 302 ^/$ /myadmin/
+# ---- /Root redirect ----
+APACHE
+fi
+
+# --- SSL сертификат (по желанию — https)
+echo -e "${YELLOW}==> Генерация SSL${NC}"
+openssl req -x509 -newkey rsa:2048 -keyout server.key -out server.crt -days 365 -nodes -subj '/CN=localhost'
+mv -f server.crt $PREFIX/etc/apache2/
+mv -f server.key $PREFIX/etc/apache2/
+
+# --- (Опционально) Сделать root без пароля в MariaDB: MYSQL_NO_PASS=1 ./install.sh
+if [ "${MYSQL_NO_PASS:-0}" = "1" ]; then
+  echo -e "${YELLOW}==> Настройка MariaDB: root без пароля (локально)${NC}"
+  # инициализация БД (если ещё не инициализирована)
+  [ -d "$PREFIX/var/lib/mysql/mysql" ] || mysql_install_db > /dev/null 2>&1 || true
+  # старт
+  (mysqld_safe > /dev/null 2>&1 &)
+  # ждём запуск
+  for i in $(seq 1 20); do
+    sleep 0.5
+    mysqladmin ping >/dev/null 2>&1 && break
+  done
+  # снимаем пароль
+  mysql -u root <<'SQL'
+ALTER USER 'root'@'localhost' IDENTIFIED BY '';
+FLUSH PRIVILEGES;
+SQL
+fi
+
+# --- Менеджер tamp (если лежит рядом)
+if [ -f ./tamp ]; then
+  rm -f $PREFIX/bin/tamp
+  cp ./tamp $PREFIX/bin/tamp
+  chmod +x $PREFIX/bin/tamp
+fi
+
+echo -e "${GREEN}>>> Готово!${NC}"
+echo -e "Открывай: ${YELLOW}http://localhost:8080/${NC} → сразу перебросит на /myadmin"
+echo -e "Прямой путь: ${YELLOW}http://localhost:8080/myadmin${NC}"
+echo -e "Запуск Apache: ${YELLOW}tamp start${NC}"
+echo -e "MariaDB без пароля root: запусти установщик как ${YELLOW}MYSQL_NO_PASS=1 bash install.sh${NC} (небезопасно)"
